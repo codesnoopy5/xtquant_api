@@ -1,0 +1,128 @@
+syntax = "proto3";
+message TradeFeedback {
+    string stock_code = 1;
+    int32 order_status = 2;
+    int32 order_id = 3;
+    int32 order_type = 4;
+    double traded_price = 5;
+    int32 traded_vol = 6;
+    string order_time = 7;
+}
+
+message AccountInfo {
+    string account_id = 1;
+    double cash = 2;
+    double frozen_cash = 3;
+    double total_asset = 4;
+    double market_value = 5;
+}
+
+message AccountInfoResponse {
+    string status = 1;
+    AccountInfo data = 2;
+}
+
+message Position {
+    string account_id = 1;
+    string stock_code = 2;
+    int32 vol = 3;
+    int32 available_vol = 4;
+    double avg_cost = 5;
+}
+
+message PositionsResponse {
+    string status = 1;
+    repeated Position positions = 2;
+}
+
+message Order {
+    string account_id = 1;
+    string stock_code = 2;
+    int32 order_id = 3;
+    string order_time = 4;
+    int32 order_type = 5;
+    int32 order_vol = 6;
+    int32 price_type = 7;
+    double price = 8;
+    int32 traded_vol = 9;
+    int32 order_status = 10;
+}
+
+message OrderResponse {
+    string status = 1;
+    repeated Order orders = 2;
+}
+
+message Trade {
+    string account_id = 1;
+    string stock_code = 2;
+    int32 order_type = 3;
+    string traded_id = 4;
+    string traded_time = 5;
+    double traded_price = 6;
+    int32 traded_vol = 7;
+}
+
+message TradeResponse {
+    string status = 1;
+    repeated Trade trades = 2;
+}
+
+message PlaceOrder {
+    string account_id = 1;
+    string stock_code = 2;
+    int32 how_many = 3;
+    double price = 4;
+    string order_type = 5;
+    string place_type = 6;
+}
+
+message PlaceOrderResponse {
+  string status = 1;
+  string msg = 2;
+}
+
+message CancelOrderId {
+    int32 order_id = 1;
+}
+
+message CancelOrderIdResponse {
+  string status = 1;
+  string msg = 2;
+}
+
+message CancelStockScope {
+    string order_type = 1;
+    string stock_code = 2;
+}
+
+message CancelStockScopeResponse {
+  string status = 1;
+  string order_type = 2;
+  string stock_code = 3;
+  string msg = 4;
+}
+
+message Entrusts {
+  string stock_code = 1;
+  string trade_type = 2;
+  string data_type = 3;
+}
+
+message EntrustsResponse {
+  string status = 1;
+  double result = 2;
+}
+
+message TodayEntrustsValueResponse {
+  string status = 1;
+  double unvalue = 2;
+  double envalue = 3;
+}
+
+message StockPositions {
+    string stock_code = 1;
+}
+
+
+

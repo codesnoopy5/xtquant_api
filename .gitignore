@@ -1,0 +1,6 @@
+/src/qmt_api.dist/
+/src/qmt_api.build/
+/src/__pycache__/
+/src/qmt_api/
+/src/logs/
+/src/out/
