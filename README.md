@@ -1,189 +1,102 @@
-基于qmt_trader开发的miniqmt交易api后端，接收易得dll或第三方交易平台发送的请求，如下单、撤单、查询持仓、查询成交记录、挂单记录、以及实时成交回报等，通过qmt_trader调用miniqmt执行交易指令。
-如果对您有用，请点个star: )
+# xtquant_api
 
-**特别说明**
+**QMT / MiniQMT 交易执行与查询后端** | Python / FastAPI / Protobuf / ZeroMQ
 
-1）强烈建议用模拟盘测试验证后再实盘，本人不对使用该软件产生的任何损失承担责任，使用即同意本条。
+为量化交易开发者提供一个本地 HTTP API 后端，连接券商 QMT / xtquant 交易环境，并与易得交易接口及公式 DLL 配合使用。适用于**开发与测试集成**；在真实账户使用前须完成接口兼容性和模拟盘验证。
 
-2）文档很久没更新了，如果使用有不对的地方，可以提issue，或者自行看源码，有空我再更新。
+> English: A local Python trading API bridge built with FastAPI, Protobuf and ZeroMQ for a QMT/xtquant-based execution workflow. QMT software, credentials and an external `qmt_trader` module are required.
 
-**一、模块**
+## 相关项目
 
-共3个功能模块：
+- **xtquant_api（本仓库）**：后端，负责接收委托、查询资金/持仓/成交与发布交易回报。
+- [OpenTraderApi](https://github.com/codesnoopy5/OpenTraderApi)：易得交易界面 C++ 接口模块。
+- [yd_dll](https://github.com/codesnoopy5/yd_dll)：易得公式/股池/预警集成 DLL。
 
-1）qmt_api后端，用于对接miniqmt，实际执行交易指令。
+简化链路：
 
-2）易得OpenTraderApi模块，即易得的开发交易API接口，调用qmt_api后端，执行界面下单、撤单、成交回报、查询持仓、查询成交记录、查询挂单记录等。
+```text
+易得交易界面 ── OpenTraderApi ──┐
+                              ├── 本机 HTTP/ZeroMQ ── xtquant_api ── QMT/xtquant ── 券商账户
+易得公式/预警 ─── yd_dll ─────┘
+```
 
-3）yd_qmt.dll自动交易函数模块，用于易得股池、预警方式实现自动化交易（通过调用qmt_api后端）。
+不同功能可能使用不同的通道。运行时应先确认各组件的 URL、协议和字段保持一致。
 
-4）注意：需要用易得最新的64位的V3.3.2版本。
+## 源码和接口
 
+| 路径 | 用途 |
+| --- | --- |
+| `src/qmt_api.py` | FastAPI 服务、QMT 连接、交易指令与查询 |
+| `src/ZMQUtil.py` | 订单队列及成交/委托回报 ZeroMQ socket |
+| `src/pb/little_goal.proto` | Protobuf 消息定义 |
+| `src/little_goal_pb2.py` | 由 Protobuf 编译器生成的 Python 消息类 |
+| `src/config.example.ini` / `src/config.example.json` | 可公开的配置模板；本地私有配置已从 Git 跟踪移除 |
+| `src/readme.txt` | 旧版环境安装和 Nuitka 打包笔记 |
 
+当前 `qmt_api.py` 声明的主要 HTTP 路由：
 
-**二、部署步骤**
+| 查询 | 交易及撤单 |
+| --- | --- |
+| `GET /account/info` | `POST /place_order/vol` |
+| `GET /positions` | `POST /place_order/amount` |
+| `POST /stock_positions` | `POST /place_order/percent` |
+| `GET /orders` | `POST /cancel/order_id` |
+| `GET /trades` | `POST /cancel/stock_scope` |
+|  | `POST /entrusts` |
 
-1）先用miniqmt模式启动qmt客户端
+部分 POST 接口的请求/响应使用 **Protobuf 二进制**，并非 JSON；请参照 `src/pb/little_goal.proto` 与对应处理函数，不要假定所有端点都支持普通 JSON。默认 HTTP 监听为 `127.0.0.1:8000`，ZMQ 回报发布端为 `tcp://localhost:5555`，仅用于本机集成。
 
-<!-- 这是一张图片，ocr 内容为： -->
-![](https://cdn.nlark.com/yuque/0/2025/png/28145799/1757425239494-f8439fe8-4c9d-472d-ab6f-7fbd7c903900.png)
+## 运行前提
 
-2）在miniqmt里面登录证券账户
+- Windows 上可正常登录交易环境的 QMT / MiniQMT 客户端及对应券商账户权限。
+- 与本地 QMT 版本兼容的 Python、`xtquant` SDK。
+- 外部模块 **`qmt_trader.qmt_trader`**（由源码直接导入，**当前仓库并未收录**）；需要自行取得或实现适配模块。因此全新克隆本仓库不能保证直接启动。
+- Python 包：FastAPI、Uvicorn、Pydantic、protobuf、pyzmq、numexpr 等；其他依赖取决于外部 `qmt_trader` 模块与 QMT 安装。旧版环境安装笔记见 `src/readme.txt`。
 
-<!-- 这是一张图片，ocr 内容为： -->
-![](https://cdn.nlark.com/yuque/0/2025/png/28145799/1757429915516-6fc64e17-1e6a-4360-b922-09a829fe1ec9.png)
+在 QMT Python 环境中安装所需第三方 Python 包（版本须与既有环境兼容）：
 
-这里的资金账号要填入qmt_api文件夹的config.json文件里面，另外还有填入qmt所在的文件夹路径，如下：
+```powershell
+python -m pip install fastapi uvicorn pydantic protobuf pyzmq numexpr
+```
 
-<!-- 这是一张图片，ocr 内容为： -->
-![](https://cdn.nlark.com/yuque/0/2025/png/28145799/1757429887958-ee947c43-b4a0-40d0-b31a-02ed1f24ca55.png)
+上述命令**不负责安装**券商提供的 `xtquant`、外部 `qmt_trader`、QMT 客户端或其他交易依赖。
 
-3）解压qmt_api.zip到任意文件夹，双击qmt_api.exe启动。如果显示"qmt连接成功"，后端就好了。
+## 配置和启动
 
-<!-- 这是一张图片，ocr 内容为： -->
-![](https://cdn.nlark.com/yuque/0/2025/png/28145799/1757430290790-caf05133-4262-4e92-8006-a2b4fb94bd50.png)
+1. 安装并启动 QMT / MiniQMT，登录模拟交易账户，确认本机 API 连接权限。
+2. 复制 `src/config.example.ini` 为 `src/config.ini`（Git 已忽略此文件），再配置真实交易端目录、账户、会话及交易参数。已有本地配置可直接保留。以下为**示意配置**：
 
+   ```ini
+   [qmt]
+   path = C:\path\to\QMT\userdata_mini
+   session_id = 123456
+   account = YOUR_SIMULATED_ACCOUNT
+   account_type = STOCK
+   is_slippage = true
+   slippage = 0.01
 
-4）将yd_qmt_v1.0.0.dll重命名为:yd_qmt.dll放到易得的FmtDll文件夹。
+   [trading]
+   repeated_buy_cooldown_time = 5
+   repeated_sell_cooldown_time = 5
+   ```
 
-5）将OpenTraderApi_v1.0.0.zip放到易得根目录（如：放在D:\YdmfStk(x64)V300目录下，也就是和MagicStk同一个文件夹），解压到当前文件夹，全部覆盖。
+3. 确认 `qmt_trader` 模块可导入，然后从 **`src` 工作目录**启动（代码按相对路径读取 `config.ini`）：
 
-6）打开易得，按F6，或从菜单打开“交易”-->“证券交易登录”-->点确定，如果显示出总资金、持仓等，表示部署成功。
+   ```powershell
+   cd src
+   python qmt_api.py
+   ```
 
+4. 在本机检查 `http://127.0.0.1:8000/docs` 是否有 API 文档；实际交易链路仍须以模拟委托及回报测试验证。
 
+## 当前限制与风险
 
-**三、功能**
+- 外部 `qmt_trader` 源码、安装与授权未随仓库发布；无法仅用这个仓库复现完整执行环境。
+- 与 [OpenTraderApi](https://github.com/codesnoopy5/OpenTraderApi) 的部分示例请求路径和报文尚不一致，例如前端源码使用 `/order/percent`，而本后端声明 `/place_order/percent`；接入前需统一协议，**不要直接实盘**。
+- `src/config.ini` 与 `src/config_*.json` 已从当前版本的 Git 跟踪中移除并添加忽略规则；仅提交不含真实账户的 `config.example.*` 模板。旧 Git 提交可能仍含历史账户标识，已暴露的凭据应进行轮换；移除当前版本文件不等于清除历史。
+- 订单重复拦截、网络错误、撤单状态、持仓冻结、回报时序等需结合真实券商环境测试；不要以 HTTP 成功替代成交确认。
+- 请勿将未经鉴权的 HTTP / ZeroMQ 服务开放到公共网络。
 
-一、易得的股池和预警的界面，下单选实盘开多是买入、实盘平多是卖出。选固定股数。
+## License / 许可
 
-二，易得自带的下单界面，按股数下单。
-
-三，目前易得界面下单、条件预警下单、股池入池出池下单，只实现了按固定股数。其他下单方法后面实现。
-
-<!-- 这是一张图片，ocr 内容为： -->
-![](https://cdn.nlark.com/yuque/0/2025/png/28145799/1757403544088-44ec1929-42f4-427d-bf2f-8db62410c55e.png)
-
-<!-- 这是一张图片，ocr 内容为： -->
-![](https://cdn.nlark.com/yuque/0/2025/png/28145799/1757403599828-6a290d8f-bd17-4a28-8048-82a8bfb32c47.png)
-
-四、以下是yd_qmt.dll的函数说明：
-
-AutoTrade函数（下单）：
-
-第一个参数：价格
-
-第二个参数：买卖多少，0不满足下单条件，>0委托金额、或百分比、或股数。
-
-当第三个参数为1或2时，为按金额买入或卖出
-
-当第三个参数为3或4时，为股数买入卖出
-
-单第三个参数为5或6时，为按百分比（填1-100）买入或卖出
-
-第三个参数：买卖类型，1按金额买入。2按金额卖出。3按股数买入。4按股数卖出。5按总资金的百分比买入。6按可用持仓的百分比卖出卖出。
-
-第四个参数：填1（预留）
-
-使用示例：
-
-条件:=Close>0;
-
-按金额买入："yd_qmt@AUTOTRADE"(委托价格,委托金额*条件,1,1);
-
-全部卖出："yd_qmt@AUTOTRADE"(委托价格,100*条件,6,1);
-
-
-
-AutoCancel函数（撤单）：
-
-第一个参数：撤单类型：1撤买。2撤卖。3全撤。
-
-第二个参数：撤单范围：0不满足撤单条件。1撤单个股票。2撤全部股票。
-
-第三个参数：填1（预留）
-
-第四个参数：填1（预留）
-
-使用示例：
-
-撤当前股票的买入挂单："yd_qmt@AutoCancel"(1,1,1,1);
-
-撤全部买入挂单："yd_qmt@AutoCancel"(1,2,1,1);
-
-撤全部卖出挂单："yd_qmt@AutoCancel"(2,2,1,1);
-
-
-
-ACCOUNT函数（查询账户）：
-
-第一个参数：查询类型：1可用金额。2冻结金额。3持仓市值。4总资产
-
-第二个参数：是否满足查询条件：0不满足。1满足
-
-第三个参数：填1（预留）
-
-第四个参数：填1（预留）
-
-使用示例：
-
-查询可用金额："yd_qmt@Account"(1,1,1,1);
-
-
-
-ASKBID函数（查询挂单）：
-
-第一个参数：买卖类型：1查询买入挂单。2查询卖出挂单。
-
-第二个参数：是否满足查询条件：0不满足。1满足
-
-第三个参数：查询类型：1股数。2金额
-
-第四个参数：填1（预留）
-
-使用示例：
-
-查询买入挂单的股数："yd_qmt@AskBid"(1,1,1,1);
-
-
-
-ACCOUNTAll函数(查询账户，一次返回所有值):
-
-acountall:="yd_qmt@ACCOUNTAll"(1,1,1,1);
-
-可用金额:acountall;
-
-冻结金额:ref(acountall,1);
-
-持仓市值:ref(acountall,2);
-
-总资产:ref(acountall,3);
-
-
-
-stock_positions函数（查询单个股票持仓，一次返回所有值）
-
-stockall:="yd_qmt@stock_positions"(1,1,1,1);
-
-持仓数量:stockall;
-
-可用数量:ref(stockall,1);
-
-平均成本:ref(stockall,2);
-
-
-
-挂买单数量:"yd_qmt@askbid"(1,IsLastBar=1,1,1);
-
-挂卖单数量:"yd_qmt@askbid"(2,IsLastBar=1,1,1);
-
-
-
-挂买单金额:"yd_qmt@askbid"(1,IsLastBar=1,2,1);
-
-挂卖单金额:"yd_qmt@askbid"(2,IsLastBar=1,2,1);
-
-
-<!-- 这是一张图片，ocr 内容为： -->
-![](https://cdn.nlark.com/yuque/0/2025/png/28145799/1758183652832-29f09570-15e3-4036-ab1d-b02023235be3.png)
-
-
+本仓库原创部分采用 [MIT License](LICENSE)。QMT、xtquant、外部 `qmt_trader`、第三方 Python 包和 Protobuf 运行库分别遵守各自的许可协议；参见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

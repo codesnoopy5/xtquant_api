@@ -1,0 +1,8 @@
+{
+  "path": "C:\\path\\to\\QMT\\userdata_mini",
+  "session_id": 123456,
+  "account": "YOUR_SIMULATED_ACCOUNT",
+  "account_type": "STOCK",
+  "is_slippage": true,
+  "slippage": 0.01
+}

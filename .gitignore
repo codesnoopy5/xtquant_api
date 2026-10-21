@@ -3,4 +3,13 @@
 /src/__pycache__/
 /src/qmt_api/
 /src/logs/
-/src/out/
+# Private trading account profiles and credentials
+/src/config.ini
+/src/config_*.json
+.env
+.env.*
+# Build/runtime dumps and local IDE files
+.idea/
+*.pyc
+*.dmp
+*crash-report*.xml
