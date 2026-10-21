@@ -89,10 +89,29 @@ python -m pip install fastapi uvicorn pydantic protobuf pyzmq numexpr
 
 4. 在本机检查 `http://127.0.0.1:8000/docs` 是否有 API 文档；实际交易链路仍须以模拟委托及回报测试验证。
 
+## C++ JSON compatibility bridge (offline-tested)
+
+To integrate [OpenTraderApi](https://github.com/codesnoopy5/OpenTraderApi) without adding Protobuf to the C++ DLL, two **loopback-only** JSON endpoints now complement the existing Protobuf routes:
+
+| Endpoint | JSON contract | Meaning |
+| --- | --- | --- |
+| `POST /bridge/order/vol` | `{"stock_code":"600000","how_many":100,"price":10.5,"order_type":"buy"}` | Validate a **share quantity** and enqueue a volume order |
+| `GET /bridge/account/info` | No body | Return `{"status":"success","data":{...}}` or HTTP 503 if unavailable |
+
+The order response is `{"status":"accepted","msg":"queued for execution; not a broker acknowledgement"}` or `status: rejected` for a duplicate; invalid orders return HTTP 422 and queue failures return HTTP 503. **Accepted does not mean filled, broker-acknowledged or even sent to the broker.** The underlying `/place_order/vol` and `/account/info` Protobuf interfaces are unchanged. The JSON endpoint is not a percentage-order endpoint.
+
+Run the tests without installing QMT or accessing an account:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+These cover validation, buy/sell quantities, duplicate rejection, mock queue failures and account lookup errors. The full QMT execution path and C++ DLL still require separate integration testing.
+
 ## 当前限制与风险
 
 - 外部 `qmt_trader` 源码、安装与授权未随仓库发布；无法仅用这个仓库复现完整执行环境。
-- 与 [OpenTraderApi](https://github.com/codesnoopy5/OpenTraderApi) 的部分示例请求路径和报文尚不一致，例如前端源码使用 `/order/percent`，而本后端声明 `/place_order/percent`；接入前需统一协议，**不要直接实盘**。
+- C++ 的股数委托与账户查询现在使用独立的 JSON 桥接入口，保持原有 Protobuf 接口不变。但撤单的券商单号映射、真实委托及成交回报、部分持仓/成交演示接口尚未完成，**不要直接实盘**。
 - `src/config.ini` 与 `src/config_*.json` 已从当前版本的 Git 跟踪中移除并添加忽略规则；仅提交不含真实账户的 `config.example.*` 模板。旧 Git 提交可能仍含历史账户标识，已暴露的凭据应进行轮换；移除当前版本文件不等于清除历史。
 - 订单重复拦截、网络错误、撤单状态、持仓冻结、回报时序等需结合真实券商环境测试；不要以 HTTP 成功替代成交确认。
 - 请勿将未经鉴权的 HTTP / ZeroMQ 服务开放到公共网络。

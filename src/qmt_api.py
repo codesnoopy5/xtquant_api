@@ -9,7 +9,7 @@ from qmt_trader.qmt_trader import MyXtQuantTraderCallback
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 import threading
 import time
 from collections import OrderedDict
@@ -18,6 +18,7 @@ import little_goal_pb2 as lg
 from qmt_trader.qmt_trader import QMTLogger
 from qmt_trader.qmt_trader import log_msg
 import configparser
+from json_volume_bridge import enqueue_volume_order
 import traceback
 
 def load_config():
@@ -378,6 +379,45 @@ def get_trades():
         iter([tradeResponse.SerializeToString()]),
         media_type="application/protobuf"
     )
+
+
+# JSON adapter for the desktop C++ interface.
+# Existing /place_order/* routes remain binary Protobuf endpoints.
+class BridgeVolumeOrder(BaseModel):
+    stock_code: str
+    how_many: StrictInt
+    price: float
+    order_type: str
+
+
+@app.post("/bridge/order/vol")
+async def bridge_order_volume(order: BridgeVolumeOrder):
+    try:
+        return enqueue_volume_order(
+            order.model_dump() if hasattr(order, "model_dump") else order.dict(),
+            app.state.buy_queue,
+            app.state.sell_queue,
+            app.state.zmq_util.order_push_socket,
+            app.state.zmq_util.order_push_lock,
+            lg.PlaceOrder,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        log_msg("JSON volume bridge queue failed: " + str(exc))
+        raise HTTPException(status_code=503, detail="order queue unavailable")
+
+
+@app.get("/bridge/account/info")
+def bridge_account_info():
+    # Unlike the legacy Protobuf endpoint, errors must not become zero balances.
+    try:
+        asset = QMTManager.get_instance().query_stock_asset_en()
+        fields = ("account_id", "cash", "frozen_cash", "total_asset", "market_value")
+        return {"status": "success", "data": {key: asset[key] for key in fields}}
+    except Exception as exc:
+        log_msg("JSON account bridge query failed: " + str(exc))
+        raise HTTPException(status_code=503, detail="account query unavailable")
 
 
 @app.post("/place_order/vol")
